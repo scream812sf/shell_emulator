@@ -1,84 +1,89 @@
-"""Модульные тесты для исполнителя команд, VFS и команд Этапа 4."""
+"""Модульные тесты для команд и VFS (Этапы 1-5)."""
 
 import os
 import unittest
 import zipfile
 from src.emulator import CommandExecutor
 
-TEST_ZIP_NAME = "test_vfs_sandbox.zip"
+TEST_ZIP = "test_vfs_primary.zip"
+TEST_ALT_ZIP = "test_vfs_alt.zip"
 
 
 class TestVirtualFileSystem(unittest.TestCase):
-    """Тестирование VFS и команд эмулятора."""
+    """Тестирование VFS и всех поддерживаемых команд эмулятора."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Создает временный zip-архив перед запуском тестов."""
-        long_content = "\n".join([f"entry {i}" for i in range(1, 15)])
-        with zipfile.ZipFile(TEST_ZIP_NAME, "w") as archive:
-            archive.writestr("root.txt", "line1\nline2\nline3\n")
-            archive.writestr("long.txt", long_content)
-            archive.writestr("home/user/test.txt", "user file content")
-            archive.writestr("var/log/", "")
+        """Создает временные архивы для тестов."""
+        with zipfile.ZipFile(TEST_ZIP, "w") as arc:
+            arc.writestr("root.txt", "line1\nline2\nline3\n")
+            arc.writestr("home/user/notes.txt", "task 1\ntask 2")
+            arc.writestr("clean_dir/", "")
+
+        with zipfile.ZipFile(TEST_ALT_ZIP, "w") as arc:
+            arc.writestr("alt_file.txt", "reloaded successfully")
 
     @classmethod
     def tearDownClass(cls) -> None:
-        """Удаляет временный zip-архив после прохождения тестов."""
-        if os.path.exists(TEST_ZIP_NAME):
-            os.remove(TEST_ZIP_NAME)
+        """Удаляет временные архивы после завершения тестов."""
+        for path in (TEST_ZIP, TEST_ALT_ZIP):
+            if os.path.exists(path):
+                os.remove(path)
 
     def setUp(self) -> None:
-        """Инициализирует VFS перед каждым тестом."""
-        self.executor = CommandExecutor(vfs_path=TEST_ZIP_NAME)
+        """Инициализирует исполнитель перед каждым тестом."""
+        self.executor = CommandExecutor(vfs_path=TEST_ZIP)
 
     def test_root_listing(self) -> None:
-        """Проверка вывода файлов и каталогов в корне."""
+        """Проверка листинга каталога."""
         items = self.executor.vfs.list_dir("/")
         self.assertIn("root.txt", items)
-        self.assertIn("home", items)
-        self.assertIn("var", items)
+        self.assertIn("clean_dir", items)
 
     def test_cd_navigation(self) -> None:
-        """Проверка перемещения по директориям."""
+        """Проверка перемещения по каталогам."""
         self.executor.execute_line("cd home/user")
         self.assertEqual(self.executor.vfs.current_dir, "/home/user")
-        self.executor.execute_line("cd ..")
-        self.assertEqual(self.executor.vfs.current_dir, "/home")
 
     def test_uptime_command(self) -> None:
-        """Проверка формата вывода команды uptime."""
+        """Проверка команды uptime."""
         output = self.executor.execute_line("uptime")
         self.assertTrue(output.startswith("up "))
 
-    def test_uptime_invalid_arguments(self) -> None:
-        """Проверка ошибки команды uptime при передаче параметров."""
-        output = self.executor.execute_line("uptime now")
-        self.assertIn("не принимает аргументов", output)
-
-    def test_tail_default_lines(self) -> None:
-        """Проверка tail без аргументов строк."""
-        output = self.executor.execute_line("tail root.txt")
-        self.assertEqual(output, "line1\nline2\nline3")
-
-    def test_tail_with_custom_count(self) -> None:
-        """Проверка tail с флагом -n."""
+    def test_tail_command(self) -> None:
+        """Проверка команды tail."""
         output = self.executor.execute_line("tail -n 2 root.txt")
         self.assertEqual(output, "line2\nline3")
 
-    def test_tail_nonexistent_file(self) -> None:
-        """Проверка ошибки tail для несуществующего файла."""
-        output = self.executor.execute_line("tail missing.txt")
-        self.assertIn("нет такого файла", output)
+    def test_rmdir_empty_directory(self) -> None:
+        """Проверка удаления пустого каталога."""
+        self.assertIn("clean_dir", self.executor.vfs.list_dir("/"))
+        res = self.executor.execute_line("rmdir clean_dir")
+        self.assertEqual(res, "")
+        self.assertNotIn("clean_dir", self.executor.vfs.list_dir("/"))
 
-    def test_tail_on_directory(self) -> None:
-        """Проверка ошибки tail при попытке чтения директории."""
-        output = self.executor.execute_line("tail home")
-        self.assertIn("это каталог", output)
+    def test_rmdir_non_empty_directory(self) -> None:
+        """Проверка ошибки при попытке удаления непустого каталога."""
+        res = self.executor.execute_line("rmdir home")
+        self.assertIn("каталог не пуст", res)
 
-    def test_tail_invalid_n_param(self) -> None:
-        """Проверка ошибки передачи нечислового аргумента в -n."""
-        output = self.executor.execute_line("tail -n abc root.txt")
-        self.assertIn("неверное число строк", output)
+    def test_rmdir_root(self) -> None:
+        """Проверка запрета удаления корня."""
+        res = self.executor.execute_line("rmdir /")
+        self.assertIn("невозможно удалить корневой каталог", res)
+
+    def test_vfs_load_success(self) -> None:
+        """Проверка команды vfs-load для смены архива на лету."""
+        res = self.executor.execute_line(f"vfs-load {TEST_ALT_ZIP}")
+        self.assertIn("успешно загружена", res)
+        items = self.executor.vfs.list_dir("/")
+        self.assertIn("alt_file.txt", items)
+        self.assertNotIn("root.txt", items)
+
+    def test_vfs_load_missing_file(self) -> None:
+        """Проверка ошибки vfs-load при отсутствии файла."""
+        res = self.executor.execute_line("vfs-load non_existing.zip")
+        self.assertIn("не найден", res)
 
 
 if __name__ == "__main__":

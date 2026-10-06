@@ -1,4 +1,4 @@
-"""Модуль виртуальной файловой системы (VFS) в оперативной памяти."""
+"""Модуль виртуальной файловой системы (VFS) в оперативной памяти (Этап 5)."""
 
 import os
 import posixpath
@@ -36,6 +36,19 @@ class VirtualFileSystem:
                     self.files.add(norm)
                     self._register_dir_parents(posixpath.dirname(norm))
                     self.file_data[norm] = archive.read(item)
+
+    def reload(self, new_vfs_path: str) -> None:
+        """Перезагружает VFS из нового zip-архива с диска."""
+        if not os.path.exists(new_vfs_path):
+            raise FileNotFoundError(
+                f"vfs-load: архив '{new_vfs_path}' не найден"
+            )
+        self.vfs_path = new_vfs_path
+        self.current_dir = "/"
+        self.directories = {"/"}
+        self.files = set()
+        self.file_data = {}
+        self._load_from_zip(new_vfs_path)
 
     def resolve_path(self, target_path: str) -> str:
         """Преобразует относительный или абсолютный путь в канонический."""
@@ -97,3 +110,33 @@ class VirtualFileSystem:
             )
         raw_bytes = self.file_data.get(file_path, b"")
         return raw_bytes.decode("utf-8", errors="replace")
+
+    def remove_dir(self, target_path: str) -> None:
+        """Удаляет пустой каталог из виртуальной памяти."""
+        resolved = self.resolve_path(target_path)
+        if resolved == "/":
+            raise ValueError("rmdir: невозможно удалить корневой каталог '/'")
+        if resolved not in self.directories:
+            if resolved in self.files:
+                raise NotADirectoryError(
+                    f"rmdir: '{target_path}': не является каталогом"
+                )
+            raise FileNotFoundError(
+                f"rmdir: '{target_path}': нет такого каталога"
+            )
+
+        has_subdirs = any(
+            d != resolved and posixpath.dirname(d) == resolved
+            for d in self.directories
+        )
+        has_files = any(
+            posixpath.dirname(f) == resolved for f in self.files
+        )
+        if has_subdirs or has_files:
+            raise OSError(f"rmdir: '{target_path}': каталог не пуст")
+
+        if self.current_dir == resolved or self.current_dir.startswith(
+            resolved + "/"
+        ):
+            self.current_dir = posixpath.dirname(resolved)
+        self.directories.remove(resolved)

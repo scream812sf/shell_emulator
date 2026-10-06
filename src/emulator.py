@@ -1,4 +1,4 @@
-"""Модуль логики интерпретатора команд с поддержкой VFS (Этап 4)."""
+"""Модуль логики командной оболочки эмулятора (Этап 5)."""
 
 import time
 from typing import Dict, List, Optional
@@ -68,8 +68,6 @@ class CommandExecutor:
             return "tail: пропущен операнд, задающий файл"
 
         lines_count = DEFAULT_TAIL_LINES
-        target_file = ""
-
         if args[0] == "-n":
             if len(args) < 3:
                 return "tail: для параметра '-n' требуется числовое значение"
@@ -88,6 +86,30 @@ class CommandExecutor:
         except (FileNotFoundError, IsADirectoryError) as error:
             return str(error)
 
+    def cmd_rmdir(self, args: List[str]) -> str:
+        """Удаляет пустые каталоги из VFS."""
+        if not args:
+            return "rmdir: пропущен операнд"
+        errors = []
+        for path_arg in args:
+            try:
+                self.vfs.remove_dir(path_arg)
+            except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as err:
+                errors.append(str(err))
+        return "\n".join(errors) if errors else ""
+
+    def cmd_vfs_load(self, args: List[str]) -> str:
+        """Загружает новый архив VFS с физического диска."""
+        if len(args) != 1:
+            return "vfs-load: укажите один аргумент — путь к архиву"
+        new_path = args[0]
+        try:
+            self.vfs.reload(new_path)
+            self.vfs_path = new_path
+            return f"VFS успешно загружена из '{new_path}'"
+        except (FileNotFoundError, Exception) as err:
+            return str(err)
+
     def execute_line(self, line: str) -> Optional[str]:
         """Парсит и выполняет команду, возвращая текстовый результат."""
         raw_line = line.strip()
@@ -104,6 +126,8 @@ class CommandExecutor:
             "cd": self.cmd_cd,
             "uptime": self.cmd_uptime,
             "tail": self.cmd_tail,
+            "rmdir": self.cmd_rmdir,
+            "vfs-load": self.cmd_vfs_load,
         }
 
         if command_name == "exit":

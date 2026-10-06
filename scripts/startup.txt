@@ -1,11 +1,12 @@
 conf-dump
 ls
 uptime
-tail readme.txt
 tail -n 2 readme.txt
-tail -n 5 long.txt
-cd home/user
-tail notes.txt
-cd /
-tail invalid.txt
-tail etc
+rmdir empty_dir
+ls
+rmdir home
+rmdir nonexistent_dir
+vfs-load secondary_vfs.zip
+ls
+tail backup_info.txt
+conf-dump
