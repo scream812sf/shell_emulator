@@ -1,7 +1,10 @@
-"""Модуль логики интерпретатора команд с поддержкой VFS."""
+"""Модуль логики интерпретатора команд с поддержкой VFS (Этап 4)."""
 
+import time
 from typing import Dict, List, Optional
 from src.vfs import VirtualFileSystem
+
+DEFAULT_TAIL_LINES = 10
 
 
 class CommandExecutor:
@@ -15,6 +18,7 @@ class CommandExecutor:
         self.vfs_path: Optional[str] = vfs_path
         self.script_path: Optional[str] = script_path
         self.vfs: VirtualFileSystem = VirtualFileSystem(vfs_path)
+        self.start_time: float = time.time()
 
     def get_prompt_path(self) -> str:
         """Возвращает текущий путь для строки приглашения."""
@@ -48,6 +52,42 @@ class CommandExecutor:
         except (FileNotFoundError, NotADirectoryError) as error:
             return str(error)
 
+    def cmd_uptime(self, args: List[str]) -> str:
+        """Выводит время работы эмулятора с момента запуска."""
+        if args:
+            return "Ошибка: команда uptime не принимает аргументов"
+        elapsed = int(time.time() - self.start_time)
+        hours = elapsed // 3600
+        minutes = (elapsed % 3600) // 60
+        seconds = elapsed % 60
+        return f"up {hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def cmd_tail(self, args: List[str]) -> str:
+        """Выводит последние строки текстового файла из VFS."""
+        if not args:
+            return "tail: пропущен операнд, задающий файл"
+
+        lines_count = DEFAULT_TAIL_LINES
+        target_file = ""
+
+        if args[0] == "-n":
+            if len(args) < 3:
+                return "tail: для параметра '-n' требуется числовое значение"
+            if not args[1].isdigit():
+                return f"tail: неверное число строк: '{args[1]}'"
+            lines_count = int(args[1])
+            target_file = args[2]
+        else:
+            target_file = args[0]
+
+        try:
+            text = self.vfs.read_file(target_file)
+            lines = text.splitlines()
+            selected = lines[-lines_count:] if lines_count > 0 else []
+            return "\n".join(selected)
+        except (FileNotFoundError, IsADirectoryError) as error:
+            return str(error)
+
     def execute_line(self, line: str) -> Optional[str]:
         """Парсит и выполняет команду, возвращая текстовый результат."""
         raw_line = line.strip()
@@ -62,6 +102,8 @@ class CommandExecutor:
             "conf-dump": self.cmd_conf_dump,
             "ls": self.cmd_ls,
             "cd": self.cmd_cd,
+            "uptime": self.cmd_uptime,
+            "tail": self.cmd_tail,
         }
 
         if command_name == "exit":

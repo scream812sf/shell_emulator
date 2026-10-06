@@ -1,9 +1,11 @@
 conf-dump
 ls
-cd home
-ls
-cd user
-ls
+uptime
+tail readme.txt
+tail -n 2 readme.txt
+tail -n 5 long.txt
+cd home/user
+tail notes.txt
 cd /
-ls
-cd invalid_folder
+tail invalid.txt
+tail etc

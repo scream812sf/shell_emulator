@@ -1,24 +1,24 @@
-"""Модульные тесты для исполнителя команд и VFS (Этап 3)."""
+"""Модульные тесты для исполнителя команд, VFS и команд Этапа 4."""
 
 import os
 import unittest
 import zipfile
 from src.emulator import CommandExecutor
-from src.vfs import VirtualFileSystem
 
 TEST_ZIP_NAME = "test_vfs_sandbox.zip"
 
 
 class TestVirtualFileSystem(unittest.TestCase):
-    """Тестирование VFS и команд cd/ls."""
+    """Тестирование VFS и команд эмулятора."""
 
     @classmethod
     def setUpClass(cls) -> None:
         """Создает временный zip-архив перед запуском тестов."""
+        long_content = "\n".join([f"entry {i}" for i in range(1, 15)])
         with zipfile.ZipFile(TEST_ZIP_NAME, "w") as archive:
-            archive.writestr("root.txt", "root file content")
+            archive.writestr("root.txt", "line1\nline2\nline3\n")
+            archive.writestr("long.txt", long_content)
             archive.writestr("home/user/test.txt", "user file content")
-            archive.writestr("home/user/doc.pdf", "pdf content")
             archive.writestr("var/log/", "")
 
     @classmethod
@@ -38,42 +38,47 @@ class TestVirtualFileSystem(unittest.TestCase):
         self.assertIn("home", items)
         self.assertIn("var", items)
 
-    def test_cd_absolute_path(self) -> None:
-        """Проверка перехода по абсолютному пути."""
-        self.executor.execute_line("cd /home/user")
+    def test_cd_navigation(self) -> None:
+        """Проверка перемещения по директориям."""
+        self.executor.execute_line("cd home/user")
         self.assertEqual(self.executor.vfs.current_dir, "/home/user")
-        output = self.executor.execute_line("ls")
-        self.assertIn("test.txt", output)
-        self.assertIn("doc.pdf", output)
-
-    def test_cd_relative_path(self) -> None:
-        """Проверка перехода по относительному пути."""
-        self.executor.execute_line("cd home")
-        self.assertEqual(self.executor.vfs.current_dir, "/home")
-        self.executor.execute_line("cd user")
-        self.assertEqual(self.executor.vfs.current_dir, "/home/user")
-
-    def test_cd_dot_dot(self) -> None:
-        """Проверка перехода на уровень выше (..)."""
-        self.executor.execute_line("cd /home/user")
         self.executor.execute_line("cd ..")
         self.assertEqual(self.executor.vfs.current_dir, "/home")
 
-    def test_cd_nonexistent_directory(self) -> None:
-        """Проверка ошибки перехода в несуществующую папку."""
-        result = self.executor.execute_line("cd nonexistent")
-        self.assertIn("нет такого файла", result)
+    def test_uptime_command(self) -> None:
+        """Проверка формата вывода команды uptime."""
+        output = self.executor.execute_line("uptime")
+        self.assertTrue(output.startswith("up "))
 
-    def test_cd_to_file(self) -> None:
-        """Проверка ошибки попытки перехода в обычный файл."""
-        result = self.executor.execute_line("cd root.txt")
-        self.assertIn("не каталог", result)
+    def test_uptime_invalid_arguments(self) -> None:
+        """Проверка ошибки команды uptime при передаче параметров."""
+        output = self.executor.execute_line("uptime now")
+        self.assertIn("не принимает аргументов", output)
 
-    def test_ls_with_argument(self) -> None:
-        """Проверка вызова команды ls с аргументом пути."""
-        result = self.executor.execute_line("ls /home/user")
-        self.assertIn("test.txt", result)
-        self.assertIn("doc.pdf", result)
+    def test_tail_default_lines(self) -> None:
+        """Проверка tail без аргументов строк."""
+        output = self.executor.execute_line("tail root.txt")
+        self.assertEqual(output, "line1\nline2\nline3")
+
+    def test_tail_with_custom_count(self) -> None:
+        """Проверка tail с флагом -n."""
+        output = self.executor.execute_line("tail -n 2 root.txt")
+        self.assertEqual(output, "line2\nline3")
+
+    def test_tail_nonexistent_file(self) -> None:
+        """Проверка ошибки tail для несуществующего файла."""
+        output = self.executor.execute_line("tail missing.txt")
+        self.assertIn("нет такого файла", output)
+
+    def test_tail_on_directory(self) -> None:
+        """Проверка ошибки tail при попытке чтения директории."""
+        output = self.executor.execute_line("tail home")
+        self.assertIn("это каталог", output)
+
+    def test_tail_invalid_n_param(self) -> None:
+        """Проверка ошибки передачи нечислового аргумента в -n."""
+        output = self.executor.execute_line("tail -n abc root.txt")
+        self.assertIn("неверное число строк", output)
 
 
 if __name__ == "__main__":

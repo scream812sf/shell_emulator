@@ -1,12 +1,14 @@
 """Скрипт для сборки тестового архива виртуальной файловой системы."""
 
 import zipfile
-from pathlib import Path
 
 VFS_NAME = "virtual_fs.zip"
 
+LONG_TEXT = "\n".join([f"Line {idx}" for idx in range(1, 16)])
+
 FILES_DATA = {
     "readme.txt": "Welcome to VFS!\nVariant 27 Shell Emulator.\n",
+    "long.txt": LONG_TEXT,
     "home/user/test.txt": "Hello from user directory.\n",
     "home/user/notes.txt": "1. Task one\n2. Task two\n",
     "etc/config.cfg": "env=production\nversion=1.0.0\n",
