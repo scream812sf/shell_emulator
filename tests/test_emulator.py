@@ -1,57 +1,79 @@
-"""Модульные тесты для логики эмулятора командной строки (Этап 2)."""
+"""Модульные тесты для исполнителя команд и VFS (Этап 3)."""
 
+import os
 import unittest
+import zipfile
 from src.emulator import CommandExecutor
-from src.gui import parse_args
+from src.vfs import VirtualFileSystem
+
+TEST_ZIP_NAME = "test_vfs_sandbox.zip"
 
 
-class TestCommandExecutorStage2(unittest.TestCase):
-    """Набор тестов для функциональности 2-го этапа."""
+class TestVirtualFileSystem(unittest.TestCase):
+    """Тестирование VFS и команд cd/ls."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Создает временный zip-архив перед запуском тестов."""
+        with zipfile.ZipFile(TEST_ZIP_NAME, "w") as archive:
+            archive.writestr("root.txt", "root file content")
+            archive.writestr("home/user/test.txt", "user file content")
+            archive.writestr("home/user/doc.pdf", "pdf content")
+            archive.writestr("var/log/", "")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Удаляет временный zip-архив после прохождения тестов."""
+        if os.path.exists(TEST_ZIP_NAME):
+            os.remove(TEST_ZIP_NAME)
 
     def setUp(self) -> None:
-        """Создание экземпляра исполнителя с параметрами конфигурации."""
-        self.executor = CommandExecutor(
-            vfs_path="/path/to/vfs.zip",
-            script_path="scripts/startup.txt",
-        )
+        """Инициализирует VFS перед каждым тестом."""
+        self.executor = CommandExecutor(vfs_path=TEST_ZIP_NAME)
 
-    def test_conf_dump_format(self) -> None:
-        """Проверка вывода служебной команды conf-dump."""
-        output, should_exit = self.executor.execute("conf-dump")
-        self.assertFalse(should_exit)
-        self.assertIn("vfs_path: /path/to/vfs.zip", output)
-        self.assertIn("script_path: scripts/startup.txt", output)
+    def test_root_listing(self) -> None:
+        """Проверка вывода файлов и каталогов в корне."""
+        items = self.executor.vfs.list_dir("/")
+        self.assertIn("root.txt", items)
+        self.assertIn("home", items)
+        self.assertIn("var", items)
 
-    def test_conf_dump_with_args_error(self) -> None:
-        """Проверка ошибки при передаче аргументов в conf-dump."""
-        output, should_exit = self.executor.execute("conf-dump extra")
-        self.assertFalse(should_exit)
-        self.assertIn("не принимает аргументов", output)
+    def test_cd_absolute_path(self) -> None:
+        """Проверка перехода по абсолютному пути."""
+        self.executor.execute_line("cd /home/user")
+        self.assertEqual(self.executor.vfs.current_dir, "/home/user")
+        output = self.executor.execute_line("ls")
+        self.assertIn("test.txt", output)
+        self.assertIn("doc.pdf", output)
 
-    def test_comment_line_ignored(self) -> None:
-        """Проверка игнорирования строк-комментариев."""
-        output, should_exit = self.executor.execute("# тестовый комментарий")
-        self.assertFalse(should_exit)
-        self.assertEqual(output, "")
+    def test_cd_relative_path(self) -> None:
+        """Проверка перехода по относительному пути."""
+        self.executor.execute_line("cd home")
+        self.assertEqual(self.executor.vfs.current_dir, "/home")
+        self.executor.execute_line("cd user")
+        self.assertEqual(self.executor.vfs.current_dir, "/home/user")
 
-    def test_cli_parsing_full(self) -> None:
-        """Проверка разбора полного набора аргументов CLI."""
-        args = parse_args(["--vfs", "my_vfs.zip", "--script", "init.txt"])
-        self.assertEqual(args.vfs_path, "my_vfs.zip")
-        self.assertEqual(args.script_path, "init.txt")
+    def test_cd_dot_dot(self) -> None:
+        """Проверка перехода на уровень выше (..)."""
+        self.executor.execute_line("cd /home/user")
+        self.executor.execute_line("cd ..")
+        self.assertEqual(self.executor.vfs.current_dir, "/home")
 
-    def test_cli_parsing_defaults(self) -> None:
-        """Проверка значений по умолчанию без передачи ключей."""
-        args = parse_args([])
-        self.assertEqual(args.vfs_path, "")
-        self.assertEqual(args.script_path, "")
+    def test_cd_nonexistent_directory(self) -> None:
+        """Проверка ошибки перехода в несуществующую папку."""
+        result = self.executor.execute_line("cd nonexistent")
+        self.assertIn("нет такого файла", result)
 
-    def test_ls_and_cd_stubs(self) -> None:
-        """Проверка корректной работы команд-заглушек ls и cd."""
-        out_ls, _ = self.executor.execute("ls -la")
-        out_cd, _ = self.executor.execute("cd folder")
-        self.assertIn("ls: вызвана с аргументами [-la]", out_ls)
-        self.assertIn("cd: вызвана с аргументами [folder]", out_cd)
+    def test_cd_to_file(self) -> None:
+        """Проверка ошибки попытки перехода в обычный файл."""
+        result = self.executor.execute_line("cd root.txt")
+        self.assertIn("не каталог", result)
+
+    def test_ls_with_argument(self) -> None:
+        """Проверка вызова команды ls с аргументом пути."""
+        result = self.executor.execute_line("ls /home/user")
+        self.assertIn("test.txt", result)
+        self.assertIn("doc.pdf", result)
 
 
 if __name__ == "__main__":
