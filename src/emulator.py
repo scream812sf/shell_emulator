@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from src.vfs import VirtualFileSystem
 
 DEFAULT_TAIL_LINES = 10
-
+MIN_TAIL_FLAG_ARGS = 3
 
 class CommandExecutor:
     """Исполнитель встроенных команд оболочки с виртуальной ФС."""
@@ -71,7 +71,7 @@ class CommandExecutor:
         target_file = ""
 
         if args[0] == "-n":
-            if len(args) < 3:
+            if len(args) < MIN_TAIL_FLAG_ARGS:
                 return "tail: для параметра '-n' требуется числовое значение"
             if not args[1].isdigit():
                 return f"tail: неверное число строк: '{args[1]}'"
