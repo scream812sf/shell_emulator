@@ -111,6 +111,17 @@ class VirtualFileSystem:
         raw_bytes = self.file_data.get(file_path, b"")
         return raw_bytes.decode("utf-8", errors="replace")
 
+    def _is_empty_directory(self, resolved: str) -> bool:
+        """Проверяет, содержит ли каталог подкаталоги или файлы."""
+        has_subdirs = any(
+            d != resolved and posixpath.dirname(d) == resolved
+            for d in self.directories
+        )
+        has_files = any(
+            posixpath.dirname(f) == resolved for f in self.files
+        )
+        return not (has_subdirs or has_files)
+
     def remove_dir(self, target_path: str) -> None:
         """Удаляет пустой каталог из виртуальной памяти."""
         resolved = self.resolve_path(target_path)
@@ -125,14 +136,7 @@ class VirtualFileSystem:
                 f"rmdir: '{target_path}': нет такого каталога"
             )
 
-        has_subdirs = any(
-            d != resolved and posixpath.dirname(d) == resolved
-            for d in self.directories
-        )
-        has_files = any(
-            posixpath.dirname(f) == resolved for f in self.files
-        )
-        if has_subdirs or has_files:
+        if not self._is_empty_directory(resolved):
             raise OSError(f"rmdir: '{target_path}': каталог не пуст")
 
         if self.current_dir == resolved or self.current_dir.startswith(

@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 from src.vfs import VirtualFileSystem
 
 DEFAULT_TAIL_LINES = 10
+MIN_TAIL_FLAG_ARGS = 3
+EXACT_ONE_ARG = 1
 
 
 class CommandExecutor:
@@ -43,7 +45,7 @@ class CommandExecutor:
 
     def cmd_cd(self, args: List[str]) -> str:
         """Выполняет смену директории в VFS."""
-        if len(args) > 1:
+        if len(args) > EXACT_ONE_ARG:
             return "Ошибка: команда cd принимает не более одного аргумента"
         target = args[0] if args else None
         try:
@@ -68,8 +70,10 @@ class CommandExecutor:
             return "tail: пропущен операнд, задающий файл"
 
         lines_count = DEFAULT_TAIL_LINES
+        target_file = ""
+
         if args[0] == "-n":
-            if len(args) < 3:
+            if len(args) < MIN_TAIL_FLAG_ARGS:
                 return "tail: для параметра '-n' требуется числовое значение"
             if not args[1].isdigit():
                 return f"tail: неверное число строк: '{args[1]}'"
@@ -94,13 +98,18 @@ class CommandExecutor:
         for path_arg in args:
             try:
                 self.vfs.remove_dir(path_arg)
-            except (FileNotFoundError, NotADirectoryError, OSError, ValueError) as err:
+            except (
+                FileNotFoundError,
+                NotADirectoryError,
+                OSError,
+                ValueError,
+            ) as err:
                 errors.append(str(err))
         return "\n".join(errors) if errors else ""
 
     def cmd_vfs_load(self, args: List[str]) -> str:
         """Загружает новый архив VFS с физического диска."""
-        if len(args) != 1:
+        if len(args) != EXACT_ONE_ARG:
             return "vfs-load: укажите один аргумент — путь к архиву"
         new_path = args[0]
         try:
